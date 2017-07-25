@@ -11,6 +11,8 @@ import (
 	"golang.org/x/net/html"
 )
 
+const defaultUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36"
+
 type Resturant struct {
 	ID           string
 	Name         string
@@ -18,12 +20,11 @@ type Resturant struct {
 }
 
 type Reservation struct {
-	Time string
+	Time time.Time
 	URL  string
 }
 
-// Extract all http** links from a given webpage
-func Crawl(data io.ReadCloser) (map[string]Resturant, error) {
+func Scrape(data io.ReadCloser) (map[string]Resturant, error) {
 	defer data.Close()
 	vals := map[string]Resturant{}
 
@@ -78,7 +79,7 @@ func Crawl(data io.ReadCloser) (map[string]Resturant, error) {
 						}
 
 						rr.Reservations = append(rr.Reservations, Reservation{
-							Time: dt.Format("03:04PM"),
+							Time: dt,
 							URL:  "https://opentable.com" + a.Val,
 						})
 					}
@@ -91,9 +92,26 @@ func Crawl(data io.ReadCloser) (map[string]Resturant, error) {
 	}
 }
 
-func FetchData(requestURL string) (io.ReadCloser, error) {
+func FetchData(requestURL string, userAgent string) (io.ReadCloser, error) {
+	if userAgent == "" {
+		userAgent = defaultUserAgent
+	}
 
-	resp, err := http.Get(requestURL)
+	client := &http.Client{
+		Timeout: time.Second * 10,
+	}
+
+	req, err := http.NewRequest("GET", requestURL, nil)
+	if err != nil {
+		return nil, errors.New("ERROR: Failed to create HTTP Request")
+	}
+
+	req.Header.Set(
+		"User-Agent",
+		defaultUserAgent,
+	)
+
+	resp, err := client.Do(req)
 
 	if err != nil {
 		return nil, errors.New("ERROR: Failed to crawl \"" + requestURL + "\"")

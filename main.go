@@ -1,30 +1,26 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"os"
-	"time"
 
 	"github.com/bleveinc/planz/otscraper"
 )
 
 func main() {
-	seedUrl := os.Args[1]
+	seedUrlBase64 := os.Args[1]
 
-	startTime := time.Now()
-	data, _ := otscraper.FetchData(seedUrl)
-	fetchTime := time.Since(startTime).String()
+	seedUrl, err := base64.StdEncoding.DecodeString(seedUrlBase64)
+	if err != nil {
+		panic(err)
+	}
+	data, _ := otscraper.FetchData(string(seedUrl), "")
 
-	startScraper := time.Now()
-	reservations, _ := otscraper.Crawl(data)
+	reservations, _ := otscraper.Scrape(data)
 
 	enc := json.NewEncoder(os.Stdout)
 	enc.SetEscapeHTML(false)
 	enc.SetIndent("", "  ")
 	enc.Encode(reservations)
-
-	fmt.Println("Fetch Time: " + fetchTime)
-	fmt.Println("Scrape Time: " + time.Since(startScraper).String())
-	fmt.Println("Total Time: " + time.Since(startTime).String())
 }
