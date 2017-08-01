@@ -1,9 +1,12 @@
-const opentable = require('../node')
+const opentable = require('../')
 
-let x = new opentable.Client()
-x.search({
+let client = new opentable.Client()
+
+client.search({
   latitude: '33.611746',
   longitude: '-117.7487',
   term: 'italian',
-}).then(data => console.log(data)).catch(err => console.log(err))
+})
+  .then(data => console.log(JSON.stringify(data, null, "  ")))
+  .catch(err => console.log(err))
 

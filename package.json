@@ -1,0 +1,11 @@
+{
+  "name": "opentable",
+  "version": "1.0.0",
+  "description": "Opentable unofficial api client",
+  "main": "index.js",
+  "scripts": {
+    "test": "npm run test"
+  },
+  "author": "BLeve Inc. <info@bleve.co>",
+  "license": "ISC"
+}
