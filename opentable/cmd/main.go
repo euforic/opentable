@@ -3,7 +3,9 @@ package main
 import (
 	"encoding/json"
 	"errors"
+	"net/http"
 	"os"
+	"time"
 
 	"github.com/bleveinc/planz/opentable"
 )
@@ -25,15 +27,37 @@ func main() {
 		writeError(err)
 	}
 
-	// make request to opentable
-	data, err := opentable.FetchData(cfg["url"], cfg["agent"])
-	if err != nil {
-		writeError(err)
+	url, ok := cfg["url"]
+	if !ok {
+		writeError(errors.New("A request url must be provided"))
 	}
-	defer data.Close()
+
+	// set custom user-agent if provided
+	userAgent, ok := cfg["agent"]
+	if !ok || userAgent == "" {
+		userAgent = defaultUserAgent
+	}
+
+	client := &http.Client{
+		Timeout: time.Second * 10,
+	}
+
+	req, err := http.NewRequest("GET", url, nil)
+	if err != nil {
+		writeError(errors.New("ERROR: Failed to create HTTP Request"))
+	}
+
+	// set user-agent for http request
+	req.Header.Set("User-Agent", userAgent)
+	// make http request
+	res, err := client.Do(req)
+	if err != nil {
+		writeError(errors.New("ERROR: Failed to crawl \"" + url + "\""))
+	}
+	defer res.Body.Close()
 
 	// scrape html response for reservation results
-	reservations, err := opentable.Scrape(data)
+	reservations, err := opentable.Parse(res.Body)
 	if err != nil {
 		writeError(err)
 	}
@@ -43,6 +67,8 @@ func main() {
 	enc.SetEscapeHTML(false)
 	enc.Encode(reservations)
 }
+
+const defaultUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/59.0.3071.115 Safari/537.36"
 
 // write error to stdout
 func writeError(err error) {
