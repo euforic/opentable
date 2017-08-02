@@ -30,6 +30,7 @@ func main() {
 	if err != nil {
 		writeError(err)
 	}
+	defer data.Close()
 
 	// scrape html response for reservation results
 	reservations, err := opentable.Scrape(data)

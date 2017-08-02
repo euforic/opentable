@@ -17,6 +17,8 @@ const defaultUserAgent = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_12_6) AppleW
 type Resturant struct {
 	ID           string
 	Name         string
+	URL          string
+	Recommended  string
 	Reservations []Reservation
 }
 
@@ -27,8 +29,7 @@ type Reservation struct {
 }
 
 // Scrape takes in html content via an io.ReadCloser and parses out the reservation data
-func Scrape(data io.ReadCloser) (map[string]Resturant, error) {
-	defer data.Close()
+func Scrape(data io.Reader) (map[string]Resturant, error) {
 	vals := map[string]Resturant{}
 
 	var rr Resturant
@@ -42,12 +43,15 @@ func Scrape(data io.ReadCloser) (map[string]Resturant, error) {
 		case html.StartTagToken:
 			t := z.Token()
 
+			attrMap := attrToMap(t.Attr)
+
 			// Check if we entered a new resturant row
 			if t.Data == "div" {
-				id := getAttr(t.Attr, "data-rid")
-				if id == "" {
+				id, ok := attrMap["data-rid"]
+				if !ok || id == "" {
 					continue
 				}
+
 				if rr.ID != id {
 					if rr.ID != "" {
 						vals[rr.ID] = rr
@@ -61,31 +65,52 @@ func Scrape(data io.ReadCloser) (map[string]Resturant, error) {
 				rr.ID = id
 			}
 
-			// Get the resturant name
-			if rr.ID != "" && t.Data == "span" && hasClass(t.Attr, "rest-row-name-text") {
-				z.Next()
-				rr.Name = z.Token().String()
+			if rr.ID != "" && t.Data == "span" {
+				// Get the resturant name
+				if hasClass(attrMap, "rest-row-name-text") {
+					z.Next()
+					rr.Name = z.Token().String()
+					continue
+				}
+
+				// get resturant recommended percentage
+				if hasClass(attrMap, "recommended-small") {
+					z.Next()
+					rr.Recommended = z.Token().String()
+					continue
+				}
 			}
 
 			// Get the resturant available reservations
 			if rr.ID != "" && t.Data == "a" {
-				for _, a := range t.Attr {
-					if (a.Key == "href" || a.Key == "data-href") && strings.HasPrefix(a.Val, "/book/") {
-						qs, err := url.ParseQuery(a.Val)
-						if err != nil {
-							return vals, err
-						}
 
-						dt, err := time.Parse("2006-01-02 15:04", qs.Get("sd"))
-						if err != nil {
-							return vals, err
-						}
+				v := attrMap["href"]
 
-						rr.Reservations = append(rr.Reservations, Reservation{
-							Time: dt,
-							URL:  "https://opentable.com" + a.Val,
-						})
+				if val, ok := attrMap["data-href"]; ok && val != "" {
+					v = val
+				}
+
+				if hasClass(attrMap, "rest-row-name") {
+					rr.URL = "https://opentable.com" + v
+					continue
+				}
+
+				// check if the url is a booking url
+				if strings.HasPrefix(v, "/book/") {
+					qs, err := url.ParseQuery(v)
+					if err != nil {
+						return vals, err
 					}
+
+					dt, err := time.Parse("2006-01-02 15:04", qs.Get("sd"))
+					if err != nil {
+						return vals, err
+					}
+
+					rr.Reservations = append(rr.Reservations, Reservation{
+						Time: dt,
+						URL:  "https://opentable.com" + v,
+					})
 				}
 			}
 		case html.ErrorToken:
@@ -124,20 +149,24 @@ func FetchData(requestURL string, userAgent string) (io.ReadCloser, error) {
 	return b, nil
 }
 
-func hasClass(attrs []html.Attribute, className string) bool {
-	for _, a := range attrs {
-		if a.Key == "class" && a.Val == className {
+func hasClass(attrMap map[string]string, name string) bool {
+	classNames, ok := attrMap["class"]
+	if !ok {
+		return false
+	}
+	c := strings.Split(classNames, " ")
+	for _, n := range c {
+		if n == name {
 			return true
 		}
 	}
 	return false
 }
 
-func getAttr(attrs []html.Attribute, attrName string) string {
+func attrToMap(attrs []html.Attribute) map[string]string {
+	m := map[string]string{}
 	for _, a := range attrs {
-		if a.Key == attrName {
-			return a.Val
-		}
+		m[a.Key] = a.Val
 	}
-	return ""
+	return m
 }
